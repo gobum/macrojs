@@ -1,0 +1,26 @@
+{
+  "name": "macrojs",
+  "version": "0.0.9",
+  "description": "JavaScript with macro syntax support",
+  "keywords": [ "macro", "include", "define" ],
+  "license": "MIT",
+  "author": {
+    "name": "leadzen",
+    "email": "leadzen@qq.com"
+  },
+  "bin": {
+    "mjc": "./bin/mjc"
+  },
+  "main": "dist/macro.js",
+  "files": [
+    "dist/macro.js",
+    "bin/mjc"
+  ],
+  "devDependencies": {
+    "uglify-js": "^3.1.0"
+  },
+  "scripts": {
+    "build": "build/build.sh",
+    "prepublish": "build/build.sh"
+  }
+}
