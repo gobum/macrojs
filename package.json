@@ -20,7 +20,7 @@
     "uglify-js": "^3.1.0"
   },
   "scripts": {
-    "build": "build/build.sh",
-    "prepublish": "build/build.sh"
+    "build": "scripts/build.sh",
+    "prepublish": "scripts/build.sh"
   }
 }
