@@ -1,6 +1,6 @@
 {
   "name": "macrojs",
-  "version": "0.0.9",
+  "version": "0.2.0",
   "description": "JavaScript with macro syntax support",
   "keywords": [ "macro", "include", "define" ],
   "license": "MIT",

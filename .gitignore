@@ -1,5 +1,6 @@
 tmp/
 node_modules/
 .vscode/
-out
-dist
+out/
+dist/
+bin/
