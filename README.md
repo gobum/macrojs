@@ -69,3 +69,40 @@ function main() {
 }
 ```
 
+### 宏定义
+格式：
+```js
+//#define MACRO_NAME macro_code
+/*#define MACRO_NAME macro_code */
+```
+例如：
+```js
+//#define MIN_AGE 18
+/*#define MIN_AGE 70 */
+
+function checkAge(age) {
+  if(age < MIN_AGE) {
+    console.log("You're so yong!");
+  }
+  else if(age >= MAX_AGE) {
+    console.log("You're too old!");
+  }
+  else {
+    console.log("It's you!");
+  }
+}
+```
+编译后：
+```js
+function checkAge(age) {
+  if(age < 18) {
+    console.log("You're so yong!");
+  }
+  else if(age >= 70) {
+    console.log("You're too old!");
+  }
+  else {
+    console.log("It's you!");
+  }
+}
+```
