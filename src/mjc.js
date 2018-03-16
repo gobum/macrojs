@@ -4,102 +4,62 @@
  */
 
 (function () {
-  var fs = require("fs");
+  try {
+    var opts = process.cli
+      .flag("version/v")
+      .flag("help/h")
+      .array("define/d")
+      .opts;
+    var files = opts[""];
 
-  var opts = process.cli
-    .flag("version/v")
-    .array("files/f")
-    .string("ver", "0.0.1")
-    .parse(process.argv.slice(2));
-  // .parse(["try/a.js"]);
-
-  function main() {
-    if (opts.version) {
-      console.log("Macro Javascript Compiler ( Ver 0.2.0 )");
+    if (opts.version || opts.help || !files.length) {
+      help();
     }
     else {
-      Promise.resolve(read())
-        .then(compile)
-        .then(write)
-        .catch(function (err) {
-          console.error("Catched Promise Error:", err.message);
-        });
-    }
-  }
+      var home = process.cwd() + "/";
+      var input = files[0];
 
-  /**
-   * 
-   */
-  function read() {
-    var files = opts[""];
-    return files.length
-      ? readFiles(files)
-      : readStdin();
-  }
+      if (/^[^./]/.test(input)) {
+        input = "./" + input;
+      }
 
-  function readFiles(files) {
-    var i = 0;
-    return Promise.resolve(goon(""));
+      var includes = Object.create(null);
+      var defines = Object.create(null);
+      var variables = Object.create(null);
+  
+      var predefs = opts.define;
+      for(var i=0; i<predefs.length; i++) {
+        var predef = predefs[i].split("=");
+        defines[predef[0]] = predef[1] || 1;
+      }
 
-    function goon(code) {
-      return i < files.length
-        ? readFile(files[i++])
-          .then(function (data) {
-            return code + data;
-          })
-          .then(goon)
-        : code;
-    }
-  }
+      var code = makeFile(input, home, includes, defines, variables, "");
 
-  function readFile(file) {
-    return new Promise(function (resolve, reject) {
-      fs.readFile(file, "utf8", function (err, code) {
-        err ? reject(err) : resolve(code);
-      });
-    });
-  }
-
-  function writeFile(file, code) {
-    return new Promise(function (resolve, reject) {
-      fs.writeFile(file, code, "utf8", function (err) {
-        err ? reject(err) : resolve();
-      });
-    });
-  }
-
-  function readStdin() {
-    return new Promise(function (resolve) {
-      var codes = "";
-      process.stdin
-        .setEncoding("utf8")
-        .on("data", function (code) {
-          codes += code;
+      if (output = files[1]) {
+        var fs = require("fs");
+        fs.writeFileSync(output, code, "utf8");
+      }
+      else {
+        new Promise(function (resolve, reject) {
+          process.stdout
+            .on("error", reject)
+            .write(code, "utf8", resolve);
         })
-        .on("end", function () {
-          resolve(codes);
-        });
-    });
+          .catch(function (error) {
+            console.error(error.message);
+            process.exit(-1);
+          });
+      }
+    }
+  }
+  catch (error) {
+    console.log(error.message);
+    process.exit(-1);
   }
 
-  function writeStdout(code) {
-    return new Promise(function (resolve, reject) {
-      process.stdout
-        .on("error", reject)
-        .write(code, "utf8", resolve);
-    });
+
+  function help() {
+    console.log("Macro Javascript Compiler (0.2.0)\n\n  Usage:\n\n    mjc <input> [<output>]\n");
   }
 
-  function write(code) {
-    var file = opts.output;
-    return file
-      ? writeFile(file, code)
-      : writeStdout(code);
-  }
-
-  function compile(code) {
-    return code;
-  }
-
-  main();
 })();

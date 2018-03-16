@@ -1,6 +1,7 @@
-tmp/
-node_modules/
 .vscode/
+node_modules/
+tmp/
+try/
 out/
 dist/
 bin/
