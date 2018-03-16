@@ -1,5 +1,5 @@
 # macrojs
-JavaScript 宏处理工具。
+JavaScript 宏处理工具。
 ## 简介
 **macrojs** 提供 JavaScript 宏处理机制，支持轻量级的单元化编程机制。与 JS 模块化编程类似，**macrojs** 可以将多个 **.js** 文件，按照代码组织逻辑合并成单一的文件。 
 
@@ -16,7 +16,7 @@ npm install -g macrojs
 ```
 ## 使用
 ### 命令行
-命令行工具 **mjc** 可以将 **macrojs** 源文件编译合并成单一文件输出。用法：
+命令行工具 **mjc** 可以将 **macrojs** 源文件编译合并成单一文件输出：
 ```
 mjc [-d predefines ] <input> [<output>]
 ```
@@ -32,7 +32,7 @@ var complieCode = macrojs("src/main.js");
 
 ## 宏语句
 宏语句是以特定格式的 JavaScript 注释来表示，以兼容 JavaScript 语法。
-### 宏引用
+### 宏引用
 格式：
 ```js
 //#include ./unit-name.js
@@ -53,7 +53,7 @@ function say(text) {
   console.log(text);
 }
 ```
-用 **mjc** 命令行工具编译：
+用 **mjc** 命令行工具编译：
 ```
 mjc src/main.js out/index.js
 ```
