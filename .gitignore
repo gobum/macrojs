@@ -6,3 +6,4 @@ try/
 out/
 dist/
 bin/
+*.tgz
