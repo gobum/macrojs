@@ -1,5 +1,9 @@
-tmp/
-node_modules/
+.DS_Store
 .vscode/
-out
-dist
+node_modules/
+tmp/
+try/
+out/
+dist/
+bin/
+*.tgz

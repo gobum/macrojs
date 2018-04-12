@@ -5,14 +5,12 @@
 /**
  * make(path, rel)
  */
-var make = function (calc) {
-  function make(path, rel) {
-    return makeFile(path, rel, Object.create(null), Object.create(null), Object.create(null), "");
-  }
+var makeFile = function (calc) {
+  calc = this.eval("(function(){with(arguments[0])return eval(arguments[1])})");
 
   function makeFile(path, rel, includes, defines, variables, indent) {
     var code;
-    path = repath(path, rel);
+    path = incpath(path, rel);
     if (includes[path]) {
       code = '';
     }
@@ -33,8 +31,9 @@ var make = function (calc) {
   }
 
   function makeCode(code, rel, includes, defines, variables, indent) {
-    var re = new RegExp(lex), $ = lex.$, token, codes = [], id, it;
-    while (token = re.exec(code)) {
+    var lex = Lex(code), $ = Lex.$, token, codes = [], id, it;
+    var skip = 0;
+    while (token = lex()) {
       var s = token[0];
       if (!s) {
         if (token.index < code.length)
@@ -42,10 +41,34 @@ var make = function (calc) {
         break;
       }
 
+      if (token[$.IF]) {
+        if (skip) {
+          skip++;
+        }
+        else {
+          it = token[$.COND];
+          try {
+            if (!calc(variables, it))
+              skip = 1;
+          }
+          catch (e) {
+            skip = 1;
+          }
+        }
+        continue;
+      }
+      if (token[$.END]) {
+        if(skip>0)
+          skip --;
+        continue;
+      }
+      if (skip) continue;
+
       if (token[$.INCLUDE]) {
         var file = token[$.FILE];
-        if (file = makeFile(file, rel, includes, defines, variables, indentOf(code, token.index)))
-          s = file;
+        // if (file = makeFile(file, rel, includes, defines, variables, indentOf(code, token.index)))
+        //   s = file;
+        s = makeFile(file, rel, includes, defines, variables, indentOf(code, token.index));
       }
       else if (token[$.DEFINE]) {
         id = token[$.DID];
@@ -68,26 +91,29 @@ var make = function (calc) {
           it = calc(variables, it);
         }
         defines[id] = variables[id] = it;
-        s = "//const "+id+" = "+String(it);
+        s = "//const " + id + " = " + String(it);
       }
-      else if(token[$.VAR]) {
+      else if (token[$.VAR]) {
         id = token[$.VID];
         it = token[$.VEXP];
         it = calc(variables, it);
         variables[id] = it;
-        s = "//var "+id+" = "+String(it);
+        s = "//var " + id + " = " + String(it);
       }
       else if (id = token[$.ID]) {
         if (id in defines) {
-          s ="/*" + id + "*/" + String(defines[id]);
+          s = "/*" + id + "*/" + String(defines[id]);
         }
       }
-      else if (token[$.BLOCK_HEAD] || token[$.ARG_HEAD]) {
+      else if (token[$.BLOCK_HEAD]) {
+        includes = Object.create(includes);
         defines = Object.create(defines);
       }
-      else if (token[$.BLOCK_TAIL] || token[$.ARG_TAIL]) {
+      else if (token[$.BLOCK_TAIL]) {
         var proto = Object.getPrototypeOf(defines);
         if (proto) defines = proto;
+        var proto = Object.getPrototypeOf(includes);
+        if (proto) includes = proto;
       }
       codes[codes.length] = s;
     }
@@ -122,6 +148,6 @@ var make = function (calc) {
     return (row + 1) + ':' + (col + 1);
   }
 
-  return make;
-}((global||window).eval("(function(){with(arguments[0])return eval(arguments[1])})"));
+  return makeFile;
+}();
 
