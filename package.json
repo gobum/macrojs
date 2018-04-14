@@ -1,6 +1,6 @@
 {
   "name": "macrojs",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "JavaScript with macro syntax support",
   "keywords": [ "macro", "include", "define" ],
   "license": "MIT",
@@ -9,12 +9,10 @@
     "email": "leadzen@qq.com"
   },
   "bin": {
-    "mjc": "./bin/mjc"
+    "mjc": "mjc"
   },
-  "main": "dist/macro.js",
   "files": [
-    "dist/macro.js",
-    "bin/mjc"
+    "mjc"
   ],
   "devDependencies": {
     "uglify-js": "^3.1.0"

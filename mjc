@@ -1,0 +1,577 @@
+#!/usr/bin/env node
+
+/** -------------------------------------------------------------------------------------------------------------------
+ * lib.js
+ */
+
+/**
+ * get(path)
+ *  获取指定路径的文本数据
+ */
+var get = function(fs){
+  if(this.window) {
+    fs = new XMLHttpRequest;
+    return function(path){
+      fs.open('GET', path, false);
+      fs.send();
+      if(!(fs.status / 100 ^ 2))
+        return fs.responseText;
+    }
+  }
+  else {
+    fs = require('fs');
+    return function(path) {
+      return fs.readFileSync(path).toString();
+    }
+  }
+}();
+
+/**
+ * repath(path, rel)
+ *  计算相对路径
+ */
+var repath = function(path, rel){
+  var rePath = /^(https?:\/\/[\w-.]+(?::\d+)?|)([\w\/.-]+)(.*|)/;
+  var reRel = /^(https?:\/\/[\w-.]+(?::\d+)?|)(\/(?:[\w@.-]+\/)*)/;
+
+  function repath(path, rel) {
+    var ms = path.match(rePath);
+    if (ms && !ms[1] && rel && (rel = rel.match(reRel))) {
+      path = ms[2];
+      if (path[0] !== '/') {
+        path = rel[2] + path;
+      }
+      path = rel[1] + normalize(path) + ms[3];
+    }
+    return path;
+  }
+
+  /** normalize(path) 路径规格化 */
+  var reSlash = /\/+/;
+
+  function normalize(src) {
+    var des = [];
+    src = src.split(reSlash);
+    for (var i = 0, l = src.length; i < l; i++) {
+      var sym = src[i];
+      if (des.length) {
+        if (sym !== '.') {
+          var end = des[des.length - 1];
+          if (sym !== '..') {
+            if (end === '.' && sym) des.length--;
+            des.push(sym);
+          }
+          else if (end === '..') {
+            des.push(sym);
+          }
+          else if (end) {
+            des.length--;
+          }
+        }
+      }
+      else {
+        des.push(sym);
+      }
+    }
+    return des.join('/');
+  }
+
+  return repath;
+
+}();
+
+var libpath = this.window || function(){
+  var fs = require("fs");
+  var reLibName = /^(?:@[a-z0-9-][a-z0-9-._]*\/)?[a-z0-9-][a-z0-9-._]*(\/[^]*)?/;
+
+  function libpath(name, rel) {
+    var ms = name.match(reLibName);
+    if (!ms)
+      throw Error("Error libaray name: '" + name + "'");
+    if(!ms[1]) {
+      name += "/all.js";
+    }
+    else if(!name.endsWith(".js")) {
+      name += ".js";
+    }
+  
+    var rel = dirname(rel);
+    while (rel) {
+      var tryname = rel + "node_modules/" + name;
+      if (fs.existsSync(tryname))
+        return tryname;
+      rel = dirname(rel.slice(0, -1));
+    }
+
+    rel = process.env.NODE_PATH;
+    if (rel) {
+      rel = rel.split(":");
+      for (var i = 0; i < rel.length; i++) {
+        var dir = rel[i];
+        if (dir) {
+          tryname = dir + "/" + name;
+          if (fs.existsSync(tryname))
+            return tryname;
+        }
+      }
+    }
+    throw Error("Can't find libaray :'"+name+"'");
+  }
+  
+  function dirname(path) {
+    return path.slice(0, path.lastIndexOf("/") + 1);
+  }
+  return libpath;  
+}();
+
+function isLibName(name) {
+  return /^[^./]/.test(name);
+}
+
+function incpath(path, rel) {
+  if(isLibName(path))
+    return libpath(path, rel);
+  return repath(path, rel);
+}/** -------------------------------------------------------------------------------------------------------------------
+ * lex.js
+ */
+
+const Lex = function () {
+  function $() { return arguments };
+
+  function regular(any, keys) {
+    if (any instanceof Object) {
+      if (any instanceof RegExp) {
+        any = any.source;
+      }
+      else if (any.length) {
+        var arg = [];
+        for (var i = 0; i < any.length; i++)
+          arg[i] = regular(any[i], keys);
+        // any = arg.join(any.join ? '' : '|');
+        if (any.join) {
+          any = arg.join('');
+        }
+        else {
+          any = arg.join('|');
+          if (arg.length > 1)
+            any = '(?:' + any + ')';
+        }
+      }
+      else {
+        arg = String(Object.keys(any));
+        keys[arg] = keys.$ = (keys.$ | 0) + 1;
+        any = '(' + regular(any[arg], keys) + ')';
+      }
+    }
+    else {
+      any = String(any);
+    }
+    return any;
+  }
+
+  var keys = Object.create(null);
+  var lex = regular($(
+    { IF: [/\/\/#if\s*\(/, { COND: /[^)]+/ }, /\)\s*{.*\n?/] },
+    { END: /\/\/#}.*\n?/ },
+    { INCLUDE: [/\/\/#include\s+/, { FILE: /\S+/ }, /.*/] },
+    { DEFINE: [/\/\/#define\s+/, { DID: /[a-zA-Z_$][\w$]*/ }, /\s*/, $([/@\s*/, { RES: /\S+/ }, /.*/], [/=\s*/, { EXP: /.+/ }], { VAL: /.+/ })] },
+    { VAR: [/\/\/#var\s+/, { VID: /[a-zA-Z_$][\w$]*/ }, /\s*=\s*/, { VEXP: /.+/ }] },
+    { TEMP_HEAD: [/`(?:[^`$\\]+|\$(?!{)|\\[^])*/, $(/`|$/, { TEMP_OPEN: /\${/ })] },  //模板头（容错）
+    { TEMP_TAIL: [/}(?:[^`$\\]+|\$(?!{)|\\[^])*/, $(/\${/, { TEMP_CLOSE: /`|$/ })] },  //模板尾（容错）
+    { BLOCK_HEAD: /\{/ },
+    { BLOCK_TAIL: /\}/ },
+    { FUNC: /(?:async\s+)?function\b[^(]*\([^)]*\)/ },
+    { ARROW: /(?:\([^)]*\)|[a-zA-Z_$][\w$]*)\s*=>/ },
+    { ID: /[a-zA-Z_$][\w$]*/ },
+    { SQ: /'(?:[^'\n\\]+|\\[^])*(?:['\n]|$)/ },  // 单引号字符串（容错）
+    { DQ: /"(?:[^"\n\\]+|\\[^])*(?:["\n]|$)/ },  // 双引号字符串（容错）
+    { REGEXP: /\/(?:\\.|\[(?:\\.|[^\]])*\]|[^\/\*\n\r])(?:\\.|\[(?:\\.|[^\]])*\]|[^/\n\r])*?\/[gimy]*/ },
+    { COMMENT: /\/\/.*|\/\*[^*]*\*+(?:[^/][^*]*\*+)*\// },
+    { OTHER: /(?:[^{}a-zA-Z_$'"`/]|\/(?![/*]))+/ },
+    { SPECIAL: /\// }
+  ), keys);
+
+  lex = RegExp(lex + '|', 'g');
+  Lex.$ = keys;
+
+  function Lex(code) {
+    var $ = keys, re = new RegExp(lex), stack = [], state = 0;
+    return function () {
+      var ms;
+      if (ms = re.exec(code)) {
+        if (ms[$.BLOCK_HEAD]) {
+          stack.push(state);
+          state = $.BLOCK_HEAD;
+        }
+        else if (ms[$.TEMP_HEAD]) {
+          stack.push(state);
+          state = $.TEMP_HEAD;
+        }
+        else if (ms[$.TEMP_TAIL]) {
+          if (state === $.BLOCK_HEAD) {
+            ms[0] = ms[$.BLOCK_TAIL] = "}";
+            ms[$.TEMP_TAIL] = ms[$.TEMP_CLOSE] = undefined;
+            re.lastIndex = ms.index + 1;
+            state = stack.pop();
+          }
+          else if (ms[$.TEMP_CLOSE] && state === $.TEMP_HEAD) {
+            state = stack.pop();
+          }
+        }
+        else if (ms[$.BLOCK_TAIL]) {
+          if (state = $.BLOCK_HEAD) {
+            state = stack.pop();
+          }
+        }
+      }
+      return ms;
+    }
+  }
+
+  return Lex;
+}();
+
+/** -------------------------------------------------------------------------------------------------------------------
+ * make.js
+ */
+
+/**
+ * make(path, rel)
+ */
+var makeFile = function (calc) {
+  calc = this.eval("(function(){with(arguments[0])return eval(arguments[1])})");
+
+  function makeFile(path, rel, includes, defines, variables, indent) {
+    var code;
+    path = incpath(path, rel);
+    if (includes[path]) {
+      code = '';
+    }
+    else {
+      includes[path] = 1;    // 占位符，防止无限递归
+      code = get(path);
+      if (code)
+        try {
+          code = makeCode(code, path, includes, defines, variables, indent);
+        }
+        catch (e) {
+          if (e instanceof MacroError)
+            e = Error(e.message + ' at (' + path + ':' + rowcol(code, e.index) + ')');
+          throw e;
+        }
+    }
+    return code;
+  }
+
+  function makeCode(code, rel, includes, defines, variables, indent) {
+    var lex = Lex(code), $ = Lex.$, token, codes = [], id, it;
+    var skip = 0;
+    while (token = lex()) {
+      var s = token[0];
+      if (!s) {
+        if (token.index < code.length)
+          throw new MacroError('Unknown token', token.index);
+        break;
+      }
+
+      if (token[$.IF]) {
+        if (skip) {
+          skip++;
+        }
+        else {
+          it = token[$.COND];
+          try {
+            if (!calc(variables, it))
+              skip = 1;
+          }
+          catch (e) {
+            skip = 1;
+          }
+        }
+        continue;
+      }
+      if (token[$.END]) {
+        if(skip>0)
+          skip --;
+        continue;
+      }
+      if (skip) continue;
+
+      if (token[$.INCLUDE]) {
+        var file = token[$.FILE];
+        // if (file = makeFile(file, rel, includes, defines, variables, indentOf(code, token.index)))
+        //   s = file;
+        s = makeFile(file, rel, includes, defines, variables, indentOf(code, token.index));
+      }
+      else if (token[$.DEFINE]) {
+        id = token[$.DID];
+        if (it = token[$.VAL]) {
+          it = it.trim();
+        }
+        else if (it = token[$.RES]) {
+          it = repath(it, rel);
+          try {
+            s = get(it);
+            if (s === undefined)
+              throw Error("Read file error: " + it);
+          }
+          catch (e) {
+            throw new MacroError(e.message, token.index);
+          }
+          it = JSON.stringify(s);
+        }
+        else if (it = token[$.EXP]) {
+          it = calc(variables, it);
+        }
+        defines[id] = variables[id] = it;
+        s = "//const " + id + " = " + String(it);
+      }
+      else if (token[$.VAR]) {
+        id = token[$.VID];
+        it = token[$.VEXP];
+        it = calc(variables, it);
+        variables[id] = it;
+        s = "//var " + id + " = " + String(it);
+      }
+      else if (id = token[$.ID]) {
+        if (id in defines) {
+          s = "/*" + id + "*/" + String(defines[id]);
+        }
+      }
+      else if (token[$.BLOCK_HEAD]) {
+        includes = Object.create(includes);
+        defines = Object.create(defines);
+      }
+      else if (token[$.BLOCK_TAIL]) {
+        var proto = Object.getPrototypeOf(defines);
+        if (proto) defines = proto;
+        var proto = Object.getPrototypeOf(includes);
+        if (proto) includes = proto;
+      }
+      codes[codes.length] = s;
+    }
+    code = codes.join('');
+    code = code.replace(/^/gm, indent).slice(indent.length);
+    return code;
+  }
+
+  function MacroError(message, index) {
+    this.message = message;
+    this.index = index;
+  }
+
+  function indentOf(text, index) {
+    for (var i = index; ' \t'.indexOf(text[i - 1]) >= 0; i--);
+    return text.slice(i, index);
+  }
+
+  /**
+   * rowcol(text, i)
+   *   计算文本 text 位置 i 的行列值。返回格式 "row:col"
+   */
+  function rowcol(text, index) {
+    if (index < 0) return '<EOF>';
+    var reLn = /[\n\u2028\u2029]|\r\n?/g;
+    var row = 0, col = 0;
+    while (reLn.exec(text) && index > reLn.lastIndex) {
+      row++;
+      col = reLn.lastIndex;
+    }
+    col = index - col;
+    return (row + 1) + ':' + (col + 1);
+  }
+
+  return makeFile;
+}();
+
+/** -------------------------------------------------------------------------------------------------------------------
+ * cli.js
+ *  CLI 参数选项
+ */
+(function () {
+  var reOption = /^--([a-zA-Z][a-zA-Z-]*)/;
+  var reTags = /^-([a-zA-Z]*)/;
+  var reTagedKey = /^([a-zA-Z][a-zA-Z-]*)(?:\/([a-zA-Z]))?/;
+
+  var converts = {
+    boolean: boolean,
+    number: number
+  }
+
+  class CLI {
+    constructor() {
+      this.types = {},
+        this.model = { "": [] },
+        this.def = {},
+        this.arg = { "": [] },
+        this.tags = {}
+    }
+
+    tag(key) {
+      var tag = reTagedKey.exec(key);
+      if (tag) {
+        key = tag[1];
+        if (tag = tag[2]) {
+          this.tags[tag] = key;
+        }
+      }
+      return key;
+    }
+
+    flag(key) {
+      key = this.tag(key);
+      this.types[key] = "flag";
+      return this;
+    }
+
+    boolean(key, value) {
+      key = this.tag(key);
+      this.types[key] = "boolean";
+      this.model[key] = boolean(value);
+      return this;
+    }
+
+    number(key, value) {
+      key = this.tag(key);
+      this.types[key] = "number";
+      this.model[key] = number(value);
+      return this;
+    }
+
+    string(key, value) {
+      key = this.tag(key);
+      this.model[key] = String(value);
+      return this;
+    }
+
+    array(key, type) {
+      key = this.tag(key);
+      this.types[key] = "array";
+      this.model[key] = [];
+      this.model[key].type = type;
+      return this;
+    }
+
+    get opts() {
+      return this.parse(process.argv.slice(2));
+    }
+
+    parse(args) {
+      var model = this.model, types = this.types, tags = this.tags;
+      var key, value, type;
+      for (var i = 0; i < args.length; i++) {
+        var arg = args[i];
+        var ms, name;
+        if (arg[0] === "-") {
+          if (ms = arg.match(/^--(\w*)/)) {
+            key = ms[1];
+            if (types[key] === "flag") {
+              model[key] = 1;
+              key = "";
+            }
+          }
+          else if (ms = arg.match(/^-(\w+)/)) {
+            name = ms[1];
+          }
+          else {
+            key = "";
+          }
+        }
+        else if (key) {
+          type = types[key];
+          if (type === "array") {
+            var array = model[key];
+            type = converts[array.type] || String;
+            array.push(type(arg));
+          }
+          else {
+            type = converts[type] || String;
+            model[key] = type(arg);
+            key = "";
+          }
+        }
+        else {
+          model[""].push(arg);
+        }
+      }
+      return model;
+    }
+  }
+
+  Object.defineProperty(process, "cli", { get: function () { return new CLI; } });
+
+  var reTrue = /^(?:true|yes|1)$/;
+  function boolean(value) {
+    return reTrue.test(value);
+  }
+
+  function number(value) {
+    return Number(value) || 0;
+  }
+})();
+/** -------------------------------------------------------------------------------------------------------------------
+ * mjc.js
+ *  mjc 主程序
+ */
+
+(function () {
+  try {
+    var opts = process.cli
+      .flag("version/v")
+      .flag("help/h")
+      .array("define/d")
+      .opts;
+    var files = opts[""];
+
+    if (opts.version || opts.help || !files.length) {
+      help();
+    }
+    else {
+      var home = process.cwd() + "/";
+      var input = files[0];
+
+      if (/^[^./]/.test(input)) {
+        input = "./" + input;
+      }
+
+      var includes = Object.create(null);
+      var defines = Object.create(null);
+      var variables = Object.create(null);
+  
+      var predefs = opts.define;
+      for(var i=0; i<predefs.length; i++) {
+        var predef = predefs[i].split("=");
+        defines[predef[0]] = variables[predef[0]] = predef[1] || 1;
+      }
+
+      var code = makeFile(input, home, includes, defines, variables, "");
+
+      if (output = files[1]) {
+        var fs = require("fs");
+        fs.writeFileSync(output, code, "utf8");
+      }
+      else {
+        new Promise(function (resolve, reject) {
+          process.stdout
+            .on("error", reject)
+            .write(code, "utf8", resolve);
+        })
+          .catch(function (error) {
+            console.error(error.message);
+            process.exit(-1);
+          });
+      }
+    }
+  }
+  catch (error) {
+    console.log(error.message);
+    process.exit(-1);
+  }
+
+
+  function help() {
+    console.log("Macro Javascript Compiler (0.2.0)\n\n  Usage:\n\n    mjc <input> [<output>]\n");
+  }
+
+})();

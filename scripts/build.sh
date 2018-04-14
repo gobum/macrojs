@@ -1,9 +1,4 @@
-
-if [ ! -d bin ]; then
-  mkdir bin
-fi
-
-echo "#!/usr/bin/env node\n" > bin/mjc
+echo "#!/usr/bin/env node\n" > mjc
 cd src
-cat lib.js lex.js make.js cli.js mjc.js >> ../bin/mjc
+cat lib.js lex.js make.js cli.js mjc.js >> ../mjc
 cd ..

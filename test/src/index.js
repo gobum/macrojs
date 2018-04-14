@@ -1,5 +1,4 @@
+//#if (BROWSER) {
+var x = 1;
 //#include ./utils.js
-
-function main(){
-  say(TEXT+OK);
-}
+//#}

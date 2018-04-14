@@ -30,7 +30,7 @@
       var predefs = opts.define;
       for(var i=0; i<predefs.length; i++) {
         var predef = predefs[i].split("=");
-        defines[predef[0]] = predef[1] || 1;
+        defines[predef[0]] = variables[predef[0]] = predef[1] || 1;
       }
 
       var code = makeFile(input, home, includes, defines, variables, "");
